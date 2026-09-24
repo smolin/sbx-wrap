@@ -1,0 +1,17 @@
+version: "3"
+tasks:
+  default:
+    desc: contents
+    cmds:
+      - "{{.TASK_EXE}} --list"
+
+  build:
+    cmds:
+      - docker-buildx build . --tag sbx-opencode
+
+  build-sbx-template:
+    cmds:
+      - task build
+      - docker save sbx-opencode:latest -o sbx-opencode.tar
+      - sbx template load sbx-opencode.tar
+

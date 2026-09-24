@@ -1,0 +1,49 @@
+schemaVersion: "2"
+kind: mixin
+name: sbx-agents
+displayName: sbx-agents
+description: ship a user AGENTS.md alongside the sbx-generated profile so opencode loads both
+
+setup:
+  install:
+    - description: Write the kit AGENTS.md to a distinct ancestor of the workspace (host user home when safe, else the workspace grandparent) so opencode loads it in addition to the sbx profile
+      command: |
+        set -eu
+
+        ws="${WORKSPACE_DIR:-$(findmnt -n -o TARGET -t virtiofs 2>/dev/null | head -n1)}"
+        parent="$(dirname "$ws")"
+        dest=""
+
+        # Host home roots: macOS (/Users/<user>) and Linux (/home/<user>).
+        case "$ws" in
+          /Users/*|/home/*)
+            home="$(printf '%s' "$ws" | cut -d/ -f1-3)"
+            # Prefer the host home ONLY when it is a distinct ancestor. In the
+            # "real layout" (project directly under home) the home AGENTS.md is the
+            # sbx profile path itself, which an install-time write cannot survive.
+            if [ "$home" != "$parent" ]; then
+              dest="$home/AGENTS.md"
+            fi
+            ;;
+        esac
+
+        # Fallback: the workspace grandparent. Always distinct from the profile
+        # path (the parent); machine-level for the real layout, but still loaded
+        # because opencode's rule walk reaches the filesystem root.
+        if [ -z "$dest" ]; then
+          dest="$(dirname "$parent")/AGENTS.md"
+        fi
+
+        # Source resolution: prefer the live host file via the ~/.agents:ro
+        # mount (mirrors the host home path in the sandbox), else the kit copy.
+        src="${home:+$home/.agents/AGENTS.md}"
+        if [ -z "${home:-}" ] || [ ! -f "$src" ]; then
+          src="/home/agent/.agents/AGENTS.md"
+        fi
+        if [ ! -f "$src" ]; then
+          echo "sbx-agents: no AGENTS.md source (host mount or kit copy); skipping" >&2
+          exit 0
+        fi
+
+        install -o agent -g agent -m 0644 "$src" "$dest"
+        echo "sbx-agents: wrote $dest from $src"
