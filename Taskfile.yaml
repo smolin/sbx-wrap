@@ -9,9 +9,54 @@ tasks:
     cmds:
       - docker-buildx build . --tag sbx-opencode
 
+  shell:
+    cmds:
+      - docker run -it --rm --entrypoint bash sbx-opencode
+
   build-sbx-template:
     cmds:
       - task build
       - docker save sbx-opencode:latest -o sbx-opencode.tar
       - sbx template load sbx-opencode.tar
+
+
+  # 'everything' is a demo MCP server for testing MCP setup
+  # #TODO: remove
+  #
+  sbx-mcp-add-everything:
+    cmds:
+      - sbx mcp add everything --command npx --args @modelcontextprotocol/server-everything
+
+
+  # context (https://github.com/neuledge/context) speaks Streamable HTTP, not
+  # stdio, so it can't use --command/--args like everything above. Instead we
+  # run its own docker image ourselves and register the resulting endpoint
+  # with `sbx mcp add --url`. Expects neuledge/context cloned to
+  # ~/resources/context (see README.md convention for this project's own clone).
+
+  build-context-image:
+    desc: Build the neuledge/context MCP server image
+    cmds:
+      - docker build -t context:local -f ~/resources/context/packages/context/Dockerfile ~/resources/context
+
+  context-serve:
+    desc: Run the context MCP server in the background on localhost:8080 (idempotent)
+    cmds:
+      - |
+        if [ -z "$(docker ps -q -f name=^context-mcp$)" ]; then
+          docker run -d --rm -p 8080:8080 --name context-mcp context:local
+        else
+          echo "context-mcp already running"
+        fi
+
+  context-stop:
+    desc: Stop the running context MCP server container
+    cmds:
+      - docker stop context-mcp
+
+  sbx-mcp-add-context:
+    desc: Register the context MCP server with sbx
+    cmds:
+      - task context-serve
+      - sbx mcp add context --url http://localhost:8080/mcp
 

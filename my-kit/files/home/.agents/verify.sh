@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Verify the coexist layout: both the sbx profile and the user AGENTS.md are
 # present, the kit file carries the breadcrumb, and (when the ~/.agents:ro host
-# mount is visible) it matches the live host file. Run inside the sandbox:
+# mount is visible) it matches the live host file and the $HOME symlink bridge
+# resolves back to the mount. Run inside the sandbox:
 #   sbx exec <sandbox> -- bash /home/agent/.agents/verify.sh
 set -eu
 
@@ -34,6 +35,17 @@ check() {
     fail=1
   fi
 }
+check_link() {
+  local label="$1" link="$2" target="$3"
+  if [ ! -e "$target" ]; then
+    echo "skip $label: host source absent ($target)"
+  elif [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+    echo "ok   $label: $link -> $target"
+  else
+    echo "FAIL $label: $link not linked to $target" >&2
+    fail=1
+  fi
+}
 
 check "sbx profile" "$profile"
 check "kit file   " "$dest"
@@ -49,6 +61,10 @@ if [ -n "$mount_src" ]; then
   else
     echo "warn host mount $mount_src not visible; install used kit copy or skipped" >&2
   fi
+
+  # Symlink bridge: $HOME entries must resolve to the live host mount.
+  check_link "skills bridge" /home/agent/.agents/skills "$home/.agents/skills"
+  check_link "config rules bridge" /home/agent/.config/opencode/AGENTS.md "$home/.config/opencode/AGENTS.md"
 fi
 
 if grep -q 'AGENTS.md=0xF73B2' "$dest"; then
